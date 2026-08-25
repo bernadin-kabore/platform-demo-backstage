@@ -46,6 +46,18 @@ and **Java Service** all show up under **Create** in the portal; adding a
 here. Every app a template scaffolds registers itself the same way, via the
 `catalog-info.yaml` its skeleton includes.
 
+## Custom scaffolder actions
+
+| Action | Purpose |
+|---|---|
+| [`platform:github:branch-protection`](packages/backend/src/modules/branch-protection) | Called by every "hello-world-*" template right after the repo is created: locks down `main`/`develop`/`release/*` (PR required, signed commits, the coverage check required) via GitHub's Rulesets API |
+
+This exists because `bernadin-kabore/*` are personal repos, not a GitHub
+Organization — see that module's README for the full explanation, and
+`platform-demo-terraform-modules/envs/github-repos/README.md` for what
+replaces it entirely on an Organization (one Terraform resource, zero
+scaffolder involvement).
+
 ## Auth
 
 `app-config.yaml` wires GitHub OAuth as the sign-in provider (`auth.github`)
@@ -60,10 +72,11 @@ scaffolder permissions (`permission.enabled: true`, RBAC policy in
    provision an S3 bucket (Crossplane claim), and target namespace.
 3. The scaffolder (defined in
    [`platform-demo-hello-world-template`](../platform-demo-hello-world-template)) templates the
-   skeleton, creates a new GitHub repo, pushes the app + its CI workflow +
-   its Helm chart, opens a PR against `platform-demo-gitops` adding the new
-   `services/<service-name>/config.json`, and registers the new service in the
-   Backstage catalog — all from one form.
+   skeleton, creates a new GitHub repo, locks down its `main`/`develop`/`release/*`
+   branches (`platform:github:branch-protection`, above), pushes the app + its
+   CI workflow + its Helm chart, opens a PR against `platform-demo-gitops`
+   adding the new `services/<service-name>/config.json`, and registers the
+   new service in the Backstage catalog — all from one form.
 4. Once the GitOps PR merges, ArgoCD deploys it with Istio sidecar
    injection, an Argo Rollout, ServiceMonitor, and OTel instrumentation
    already wired in — the developer never touches Kubernetes YAML.
