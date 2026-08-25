@@ -1,0 +1,32 @@
+app:
+  baseUrl: https://backstage.platform-demo.acme.io
+
+backend:
+  baseUrl: https://backstage.platform-demo.acme.io
+  database:
+    client: pg
+    connection:
+      host: ${POSTGRES_HOST}
+      port: ${POSTGRES_PORT}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+      ssl:
+        rejectUnauthorized: true
+
+auth:
+  environment: production
+
+permission:
+  enabled: true
+  rbac:
+    policies-csv-file: ./rbac-policy.csv
+    admin:
+      users:
+        - name: user:default/platform-team-lead
+
+techdocs:
+  publisher:
+    type: awsS3
+    awsS3:
+      bucketName: ${TECHDOCS_S3_BUCKET}
+      region: ${AWS_REGION}
