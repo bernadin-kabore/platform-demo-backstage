@@ -1,0 +1,47 @@
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: platform-engineering-demo
+  description: Reusable Terraform modules, GitOps-managed cluster add-ons, and a self-service Backstage template — the platform every "hello world" app is built on top of
+spec:
+  owner: platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backstage-portal
+  description: The Internal Developer Portal itself
+  links:
+    - url: https://github.com/bernadin-kabore/platform-demo-backstage
+      title: Source
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: platform-engineering-demo
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: platform-demo-gitops
+  description: ArgoCD's source of truth for every cluster add-on and application
+  links:
+    - url: https://github.com/bernadin-kabore/platform-demo-gitops
+      title: Source
+spec:
+  type: gitops-repo
+  owner: platform-team
+  system: platform-engineering-demo
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: platform-demo-terraform-modules
+  description: Reusable Terraform modules provisioning the AWS infrastructure
+  links:
+    - url: https://github.com/bernadin-kabore/platform-demo-terraform-modules
+      title: Source
+spec:
+  type: infrastructure
+  owner: platform-team
+  system: platform-engineering-demo
