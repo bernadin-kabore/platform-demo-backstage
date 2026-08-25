@@ -31,6 +31,14 @@ scaffolder:
     name: platform-bot
     email: platform-bot@acme.io
 
+# Read by the platform:github:branch-protection custom scaffolder action
+# (packages/backend/src/modules/branch-protection) to exempt the deploy bot
+# from the ruleset it creates on every scaffolded repo — the numeric App ID
+# of the "platform-deploy-bot" GitHub App, not a secret itself, but still
+# environment-specific, so it's not hardcoded in the action.
+platform:
+  deployBotAppId: ${PLATFORM_DEPLOY_BOT_APP_ID}
+
 catalog:
   rules:
     - allow: [Component, System, API, Group, User, Resource, Location, Template]
