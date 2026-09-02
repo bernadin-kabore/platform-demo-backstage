@@ -51,12 +51,48 @@ here. Every app a template scaffolds registers itself the same way, via the
 | Action | Purpose |
 |---|---|
 | [`platform:github:branch-protection`](packages/backend/src/modules/branch-protection) | Called by every "hello-world-*" template right after the repo is created: locks down `main`/`develop`/`release/*` (PR required, signed commits, the coverage check required) via GitHub's Rulesets API |
+| [`platform:ai:request`](packages/backend/src/modules/ai-platform-request) | Called by the "Ask the Platform" template: hands a sentence of developer intent to the AI Platform Agent and returns the pull requests it opened, or the evaluation report explaining why it opened none |
 
 This exists because `bernadin-kabore/*` are personal repos, not a GitHub
 Organization — see that module's README for the full explanation, and
 `platform-demo-terraform-modules/envs/github-repos/README.md` for what
 replaces it entirely on an Organization (one Terraform resource, zero
 scaffolder involvement).
+
+## The "ask the platform for something" flow
+
+The golden path above covers the case the platform already has a template for.
+This is the case it does not.
+
+1. Developer opens Backstage → **Create** → **Ask the Platform**, and describes
+   what they want in a sentence or two: *"we have no idea when a service starts
+   crash-looping until someone notices the errors"*.
+2. [`platform:ai:request`](packages/backend/src/modules/ai-platform-request)
+   hands that to the AI Platform Agent running in the cluster.
+3. The agent routes it to the specialists it actually needs — that request goes
+   to the observability agent and nobody else — each of which reads the
+   relevant repositories and proposes complete files.
+4. The change set goes through the agent's eval gate: deterministic checks that
+   pre-flight the Kyverno policies and the platform's own conventions, then a
+   review model scoring whether it answers the request, follows the
+   conventions, and avoids rebuilding what already exists.
+5. If it passes, pull requests appear on the affected repositories, labelled
+   `ai-generated` and `needs-human-approval`, carrying the agent's reasoning
+   and its audit trail in the body. If it does not pass, the scaffolder task
+   fails with the evaluation report — which is the gate working, and usually
+   points at a more specific way to ask.
+6. From there it is the platform that already existed: CI scans it, Terraform
+   changes get a `terraform plan` posted to the pull request, branch protection
+   requires an approving human review, and ArgoCD deploys only what that human
+   merges.
+
+**The portal holds no model credential.** It knows one URL. The agent reaches
+Claude through Amazon Bedrock with an IRSA role rather than a key, which is
+also why this whole flow did not have to wait for secrets management.
+
+**The agent cannot merge anything, including in its own repository.** Its GitHub
+App appears in no `bypass_actors` list anywhere — see
+`platform-demo-terraform-modules/envs/github-repos`.
 
 ## Observability links on a service page
 
