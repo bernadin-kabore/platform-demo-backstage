@@ -39,6 +39,19 @@ scaffolder:
 platform:
   deployBotAppId: ${PLATFORM_DEPLOY_BOT_APP_ID}
 
+  # Read by the platform:ai:request custom scaffolder action
+  # (packages/backend/src/modules/ai-platform-request) — the in-cluster address
+  # of the AI Platform Agent. In the cluster this resolves to
+  # http://ai-platform-agent.ai-platform.svc.cluster.local; the agent's
+  # NetworkPolicy accepts ingress only from this namespace and it is not
+  # exposed outside the cluster at all.
+  #
+  # Note that no model credential appears anywhere in this file. The portal
+  # never talks to Claude — the agent does, from inside the cluster, using an
+  # IRSA role rather than a key.
+  aiAgent:
+    baseUrl: ${AI_PLATFORM_AGENT_URL}
+
 catalog:
   rules:
     - allow: [Component, System, API, Group, User, Resource, Location, Template]
