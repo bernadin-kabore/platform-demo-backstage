@@ -24,7 +24,7 @@ below.
 | `@backstage/plugin-kubernetes` | Pod status, events, and logs for a service, right on its catalog page |
 | `@backstage/plugin-techdocs` | Docs-as-code, rendered from each repo's `docs/` |
 | `@roadiehq/backstage-plugin-argo-cd` | Shows each service's ArgoCD sync/health status inline |
-| `@backstage-community/plugin-grafana` | Embeds the service's Grafana dashboards |
+| `@backstage-community/plugin-grafana` | Embeds the service's Grafana dashboards (metrics, traces and logs all land in Grafana) |
 | `@backstage-community/plugin-tech-insights` | Surfaces Kyverno PolicyReports as scorecards per service |
 | `backstage-plugin-github-actions` | Shows the last CI run and its SAST/SCA/scan results |
 
@@ -58,6 +58,23 @@ Organization — see that module's README for the full explanation, and
 replaces it entirely on an Organization (one Terraform resource, zero
 scaffolder involvement).
 
+## Observability links on a service page
+
+Telemetry is a **platform capability**, not something a developer wires up
+per service: every scaffolded application emits OTLP traces and metrics and
+trace-correlated JSON logs by default. The portal's job is only to surface
+where that telemetry landed.
+
+Per-service observability annotations therefore belong in the scaffolder
+template
+([`platform-demo-hello-world-template/common/catalog-info.yaml`](../platform-demo-hello-world-template/common/catalog-info.yaml)),
+not in this repo - otherwise every new service would need a change here,
+which is exactly the manual step the golden path exists to remove. This repo
+owns only the plugin configuration that resolves those annotations.
+
+The telemetry architecture itself is documented in
+[`platform-demo-gitops/docs/observability/README.md`](../platform-demo-gitops/docs/observability/README.md).
+
 ## Auth
 
 `app-config.yaml` wires GitHub OAuth as the sign-in provider (`auth.github`)
@@ -78,5 +95,7 @@ scaffolder permissions (`permission.enabled: true`, RBAC policy in
    adding the new `services/<service-name>/config.json`, and registers the
    new service in the Backstage catalog — all from one form.
 4. Once the GitOps PR merges, ArgoCD deploys it with Istio sidecar
-   injection, an Argo Rollout, ServiceMonitor, and OTel instrumentation
-   already wired in — the developer never touches Kubernetes YAML.
+   injection, an Argo Rollout, and OpenTelemetry already wired in — the
+   developer never touches Kubernetes YAML. Traces and metrics leave over
+   OTLP and logs are emitted as trace-correlated JSON on stdout, so
+   telemetry flows without the developer configuring anything.
