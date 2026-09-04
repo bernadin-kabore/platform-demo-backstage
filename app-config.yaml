@@ -52,6 +52,18 @@ platform:
   aiAgent:
     baseUrl: ${AI_PLATFORM_AGENT_URL}
 
+    # The GitHub owner the agent's App is installed on. The platform:ai:request
+    # action compares this against the github.com/project-slug annotation of the
+    # service a developer selected, and refuses when they disagree.
+    #
+    # Without the check, a Component annotated with a slug under some other
+    # organisation would resolve to a bare repository name, and the agent —
+    # which prefixes every repository with its own configured owner — would
+    # authorize a same-named repository in this organisation instead. That is a
+    # narrow path and an entirely silent one, which is exactly the kind worth
+    # closing explicitly.
+    githubOwner: bernadin-kabore
+
 catalog:
   rules:
     - allow: [Component, System, API, Group, User, Resource, Location, Template]
