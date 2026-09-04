@@ -21,16 +21,25 @@ import { parseEntityRef, stringifyEntityRef } from '@backstage/catalog-model';
 //      scanning, terraform plan, an approving human review, ArgoCD — is the
 //      platform that already existed, unchanged.
 //
-// What it *does* do, and did not before, is resolve the selected service into a
-// repository. That resolution is the authorization input for the entire run, so
-// it is worth being precise about where the trust actually sits:
+// What it *does* do is resolve the selected service into the repositories and
+// paths that service actually occupies. That resolution is the authorization
+// input for the entire run, so it is worth being precise about where the trust
+// actually sits:
 //
 //   - The developer picks a Component from an EntityPicker with
 //     allowArbitraryValues: false, so the entity reference is a catalog entity
 //     rather than something typed.
-//   - The repository comes from that entity's github.com/project-slug
-//     annotation, which the shared catalog-info.yaml sets at scaffold time.
-//   - Ownership comes from the entity's spec.owner.
+//   - Four facts come from that entity's annotations, which the scaffolder sets
+//     when it creates the application: which repository holds the code, which
+//     directory in it belongs to this service, which repository holds the
+//     deployment state, and which key in it this service deploys under.
+//   - Ownership comes from the entity's spec.owner, and the application from
+//     spec.system.
+//
+// The path facts matter as much as the repository ones now. An application's
+// source repository holds every service its team owns and its GitOps repository
+// holds every service's deployment state, so resolving only to a repository
+// would authorize a run for services nobody selected.
 //
 // None of it comes from the request text, and the agent independently
 // re-validates every field including the ownership comparison. This action
@@ -91,7 +100,7 @@ export const createAiPlatformRequestAction = (options: {
 
       if (serviceContext) {
         ctx.logger.info(
-          `Request scoped to ${serviceContext.entityRef}, which resolves to the ${serviceContext.repo} repository and is owned by ${serviceContext.owner}.`,
+          `Request scoped to ${serviceContext.entityRef} in application ${serviceContext.application}, owned by ${serviceContext.owner}. Code: ${serviceContext.sourceRepo}/${serviceContext.sourcePath}. Deployment state: ${serviceContext.gitopsRepo}, service ${serviceContext.gitopsService}.`,
         );
       } else {
         ctx.logger.info(
@@ -255,15 +264,25 @@ async function resolveService(args: {
     );
   }
 
-  const slug = entity.metadata.annotations?.['github.com/project-slug'];
-  if (!slug) {
-    throw new Error(
-      `${service} has no github.com/project-slug annotation, so the platform cannot tell which repository it lives in. Add the annotation to its catalog-info.yaml and try again.`,
-    );
-  }
+  const annotations = entity.metadata.annotations ?? {};
 
-  const [slugOwner, repo] = slug.split('/');
-  if (!slugOwner || !repo) {
+  const required = (annotation: string, what: string): string => {
+    const value = annotations[annotation];
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new Error(
+        `${service} has no ${annotation} annotation, so the platform cannot tell ${what}. The New Application scaffolder sets it; a Component created some other way has to carry it too.`,
+      );
+    }
+    return value.trim();
+  };
+
+  // The source repository is still read from github.com/project-slug rather
+  // than from the platform annotation, because project-slug is what every other
+  // Backstage plugin already uses and two sources of truth for the same fact is
+  // how they drift apart.
+  const slug = required('github.com/project-slug', 'which repository it lives in');
+  const [slugOwner, sourceRepo] = slug.split('/');
+  if (!slugOwner || !sourceRepo) {
     throw new Error(`The github.com/project-slug annotation on ${service} is not in owner/repo form: "${slug}".`);
   }
   if (expectedGithubOwner && slugOwner !== expectedGithubOwner) {
@@ -275,9 +294,23 @@ async function resolveService(args: {
     );
   }
 
+  const sourcePath = required('platform.acme.io/source-path', 'which directory in it belongs to this service');
+  const gitopsRepo = required('platform.acme.io/gitops-repo', 'where its deployment state lives');
+  const gitopsService = required(
+    'platform.acme.io/gitops-service',
+    'which deployment state in that repository is its own',
+  );
+
   const owner = entity.spec?.owner;
   if (typeof owner !== 'string' || !owner.trim()) {
     throw new Error(`${service} has no owner in the catalog, so there is nobody to authorize this request as.`);
+  }
+
+  const application = entity.spec?.system;
+  if (typeof application !== 'string' || !application.trim()) {
+    throw new Error(
+      `${service} has no system in the catalog, so the platform cannot tell which application it belongs to. Every service scaffolded as part of an application has one.`,
+    );
   }
 
   if (normalizeGroup(owner) !== normalizeGroup(requester)) {
@@ -289,9 +322,25 @@ async function resolveService(args: {
   return {
     entityRef: stringifyEntityRef(ref),
     name: entity.metadata.name,
-    repo,
+    application: stripNamespace(application),
     owner,
+    sourceRepo,
+    sourcePath,
+    gitopsRepo,
+    gitopsService,
   };
+}
+
+/**
+ * spec.system arrives either bare ("checkout-platform") or as a full entity
+ * reference ("system:default/checkout-platform") depending on how the entity
+ * was written. The agent validates it as a plain name, so normalise here rather
+ * than having every caller guess which shape they were handed.
+ */
+function stripNamespace(value: string): string {
+  const trimmed = value.trim();
+  const withoutKind = trimmed.includes(':') ? trimmed.slice(trimmed.indexOf(':') + 1) : trimmed;
+  return withoutKind.includes('/') ? withoutKind.slice(withoutKind.indexOf('/') + 1) : withoutKind;
 }
 
 /**
@@ -333,11 +382,19 @@ function describeDenials(record: AgentRequestRecord): string[] {
   return denials.length ? ['The agent was refused the following, which may explain the result:', ...denials, ''] : [];
 }
 
+// Mirrors the agent's own ServiceContext (platform-demo-ai-agent/src/scope.ts),
+// which re-validates every field of it. The duplication is deliberate: this
+// portal deliberately holds no dependency on the agent's package, and the agent
+// deliberately trusts nothing this file sends.
 interface ServiceContext {
   entityRef: string;
   name: string;
-  repo: string;
+  application: string;
   owner: string;
+  sourceRepo: string;
+  sourcePath: string;
+  gitopsRepo: string;
+  gitopsService: string;
 }
 
 interface ExecutionPlan {

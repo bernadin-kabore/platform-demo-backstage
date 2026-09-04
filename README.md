@@ -118,18 +118,24 @@ The telemetry architecture itself is documented in
 scaffolder permissions (`permission.enabled: true`, RBAC policy in
 `app-config.production.yaml`).
 
-## The "spin up a hello world app" flow
+## The "spin up a new application" flow
 
-1. Developer opens Backstage → **Create** → picks a language (**hello-world-nodejs**, **-python**, **-go**, or **-java**).
-2. Fills in: service name, owning team, language runtime, whether to
-   provision an S3 bucket (Crossplane claim), and target namespace.
+1. Developer opens Backstage → **Create** → **New Application**.
+2. Fills in: application name, owning team, description, then one entry per
+   microservice — its name, its language, what it does — plus whether to
+   provision an S3 bucket for each (Crossplane claim).
 3. The scaffolder (defined in
-   [`platform-demo-hello-world-template`](../platform-demo-hello-world-template)) templates the
-   skeleton, creates a new GitHub repo, locks down its `main`/`develop`/`release/*`
-   branches (`platform:github:branch-protection`, above), pushes the app + its
-   CI workflow + its Helm chart, opens a PR against `platform-demo-gitops`
-   adding the new `services/<service-name>/config.json`, and registers the
-   new service in the Backstage catalog — all from one form.
+   [`platform-demo-hello-world-template`](../platform-demo-hello-world-template))
+   creates **two** repositories and registers both. `<app>-source` holds every
+   service's code under `services/<name>/`, one change-aware pipeline, and a
+   `catalog-info.yaml` declaring one System with one Component per service.
+   `<app>-gitops` holds the Helm chart, three environments, and the
+   ApplicationSet that turns them into deployments. Both get their
+   `main`/`develop`/`release/*` branches locked down
+   (`platform:github:branch-protection`, above) — the GitOps repository
+   deliberately without a deploy-bot bypass, because the source pipeline has to
+   ask it for a deployment rather than take one. Finally it opens a PR against
+   `platform-demo-gitops` adding one `applications/<app>.json` pointer.
 4. Once the GitOps PR merges, ArgoCD deploys it with Istio sidecar
    injection, an Argo Rollout, and OpenTelemetry already wired in — the
    developer never touches Kubernetes YAML. Traces and metrics leave over
