@@ -22,7 +22,7 @@ export const createBranchProtectionAction = (options: { config: Config }) => {
   return createTemplateAction({
     id: 'platform:github:branch-protection',
     description:
-      'Creates a repository ruleset on main/develop/release/* requiring PR review, passing status checks (including the coverage gate), and signed commits, with the platform deploy bot exempted so CI can still push automated chart bumps to main.',
+      'Creates a repository ruleset on main/develop/release/* requiring PR review, passing status checks, and signed commits. The platform deploy bot is exempted only if allowDeployBotBypass is set — a GitOps repository must never set it, because CI opening a pull request there is the whole point.',
     schema: {
       input: {
         owner: z => z.string({ description: 'Repository owner (org or user)' }),
@@ -32,12 +32,24 @@ export const createBranchProtectionAction = (options: { config: Config }) => {
             .array(z.string())
             .describe('Status check contexts that must pass before merging')
             .optional(),
+        allowDeployBotBypass: z =>
+          z
+            .boolean()
+            .describe(
+              'Whether the platform deploy bot may bypass this ruleset. True only for a repository whose own CI has to push to a protected branch. A GitOps repository must set this false: its whole purpose is that changes arrive by reviewed pull request.',
+            )
+            .optional(),
       },
     },
     async handler(ctx) {
       const { owner, repo } = ctx.input;
+      // A matrix job's name contains the service it ran for, and the services
+      // are not known when a ruleset is written — so an application repository
+      // requires `ci-gate`, one job that fans every stage in, rather than the
+      // per-stage names a single-service repository could enumerate.
       const requiredStatusChecks =
-        ctx.input.requiredStatusChecks ?? ['test', 'sast', 'sca', 'coverage / check'];
+        ctx.input.requiredStatusChecks ?? ['ci-gate', 'semgrep', 'gitleaks'];
+      const allowDeployBotBypass = ctx.input.allowDeployBotBypass ?? false;
 
       const githubIntegration = ScmIntegrations.fromConfig(config).github.byHost('github.com');
       const token = githubIntegration?.config.token;
@@ -47,18 +59,27 @@ export const createBranchProtectionAction = (options: { config: Config }) => {
         );
       }
 
-      // The platform deploy bot (see .github/actions/create-github-app-token
-      // usage in every scaffolded ci.yml's update-manifests job) needs to
-      // bypass this ruleset entirely to push image-tag bumps straight to
-      // main. Its numeric App ID is a deployment-wide constant, not
-      // per-service, so it's read from config rather than passed in by the
-      // template — see app-config.yaml's platform.deployBotAppId.
-      const deployBotAppId = config.getOptionalNumber('platform.deployBotAppId');
+      // The platform deploy bot's numeric App ID is a deployment-wide
+      // constant, not per-repository, so it's read from config rather than
+      // passed in by the template — see app-config.yaml's
+      // platform.deployBotAppId.
+      //
+      // It is granted a bypass on a repository only when that repository's own
+      // CI has to write to its own protected branch. Under the application
+      // model no repository does: the source pipeline's only deployment action
+      // is opening a pull request against the GitOps repository, and it must
+      // not be able to merge that pull request itself. The default is
+      // therefore no bypass, and a caller has to ask for one explicitly.
+      const deployBotAppId = allowDeployBotBypass
+        ? config.getOptionalNumber('platform.deployBotAppId')
+        : undefined;
 
       const octokit = new Octokit({ auth: token });
 
       ctx.logger.info(
-        `Creating branch-protection ruleset on ${owner}/${repo} (main, develop, release/*)`,
+        `Creating branch-protection ruleset on ${owner}/${repo} (main, develop, release/*), requiring [${requiredStatusChecks.join(', ')}]${
+          deployBotAppId ? ', with the platform deploy bot exempted' : ''
+        }`,
       );
 
       await octokit.request('POST /repos/{owner}/{repo}/rulesets', {
