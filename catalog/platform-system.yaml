@@ -45,3 +45,27 @@ spec:
   type: infrastructure
   owner: platform-team
   system: platform-engineering-demo
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ai-platform-agent
+  description: >-
+    Turns a natural-language platform request from this portal into pull
+    requests across the four platform repositories, gated by its own automated
+    eval suite. Opens pull requests; merges nothing.
+  annotations:
+    github.com/project-slug: bernadin-kabore/platform-demo-ai-agent
+    backstage.io/kubernetes-id: ai-platform-agent
+    argocd/app-name: ai-platform-agent
+  links:
+    - url: https://github.com/bernadin-kabore/platform-demo-ai-agent
+      title: Source
+    - url: https://github.com/bernadin-kabore/platform-demo-ai-agent/blob/main/docs/evals.md
+      title: How the eval gate works
+      icon: docs
+spec:
+  type: service
+  lifecycle: experimental
+  owner: platform-team
+  system: platform-engineering-demo
