@@ -39,6 +39,31 @@ scaffolder:
 platform:
   deployBotAppId: ${PLATFORM_DEPLOY_BOT_APP_ID}
 
+  # Read by the platform:ai:request custom scaffolder action
+  # (packages/backend/src/modules/ai-platform-request) — the in-cluster address
+  # of the AI Platform Agent. In the cluster this resolves to
+  # http://ai-platform-agent.ai-platform.svc.cluster.local; the agent's
+  # NetworkPolicy accepts ingress only from this namespace and it is not
+  # exposed outside the cluster at all.
+  #
+  # Note that no model credential appears anywhere in this file. The portal
+  # never talks to Claude — the agent does, from inside the cluster, using an
+  # IRSA role rather than a key.
+  aiAgent:
+    baseUrl: ${AI_PLATFORM_AGENT_URL}
+
+    # The GitHub owner the agent's App is installed on. The platform:ai:request
+    # action compares this against the github.com/project-slug annotation of the
+    # service a developer selected, and refuses when they disagree.
+    #
+    # Without the check, a Component annotated with a slug under some other
+    # organisation would resolve to a bare repository name, and the agent —
+    # which prefixes every repository with its own configured owner — would
+    # authorize a same-named repository in this organisation instead. That is a
+    # narrow path and an entirely silent one, which is exactly the kind worth
+    # closing explicitly.
+    githubOwner: bernadin-kabore
+
 catalog:
   rules:
     - allow: [Component, System, API, Group, User, Resource, Location, Template]
