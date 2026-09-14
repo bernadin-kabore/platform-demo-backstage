@@ -2,6 +2,28 @@ app:
   title: Platform Engineering Portal
   baseUrl: http://localhost:3000
 
+  # The new frontend system discovers plugins from packages/app/package.json
+  # rather than from imports in App.tsx. Adding a plugin to this portal is
+  # therefore a dependency plus, where it needs one, an entry under `extensions`
+  # below — App.tsx itself barely changes.
+  packages: all
+
+  extensions:
+    # The catalog is the portal's front door. A developer arriving here should
+    # land on the list of what exists, not on a widget dashboard.
+    - page:catalog:
+        config:
+          path: /
+    - home-page-widget:home/toolkit:
+        config:
+          tools:
+            - url: https://github.com/bernadin-kabore
+              label: GitHub
+              icon: github
+            - url: https://backstage.io/docs
+              label: Backstage Docs
+              icon: docs
+
 organization:
   name: Acme
 
@@ -9,9 +31,20 @@ backend:
   baseUrl: http://localhost:7007
   listen:
     port: 7007
+  csp:
+    connect-src: ["'self'", 'http:', 'https:']
+  cors:
+    origin: http://localhost:3000
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
   database:
     client: better-sqlite3
-    connection: ":memory:" # swap for postgres in app-config.production.yaml
+    connection: ':memory:' # swap for postgres in app-config.production.yaml
+  actions:
+    pluginSources:
+      - auth
+      - catalog
+      - scaffolder
 
 integrations:
   github:
@@ -21,10 +54,16 @@ integrations:
 auth:
   environment: development
   providers:
+    # Guest sign-in exists so the portal boots before the GitHub OAuth app does.
+    # It is a development-only affordance: app-config.production.yaml switches
+    # `environment` to production, where guest is not offered.
+    guest: {}
     github:
       development:
         clientId: ${AUTH_GITHUB_CLIENT_ID}
         clientSecret: ${AUTH_GITHUB_CLIENT_SECRET}
+  clientIdMetadataDocuments:
+    enabled: false
 
 scaffolder:
   defaultAuthor:
@@ -49,7 +88,8 @@ platform:
   # of the AI Platform Agent. In the cluster this resolves to
   # http://ai-platform-agent.ai-platform.svc.cluster.local; the agent's
   # NetworkPolicy accepts ingress only from this namespace and it is not
-  # exposed outside the cluster at all.
+  # exposed outside the cluster at all. A portal running on a laptop therefore
+  # cannot reach it without a port-forward.
   #
   # Note that no model credential appears anywhere in this file. The portal
   # never talks to Claude — the agent does, from inside the cluster, using an
@@ -70,13 +110,22 @@ platform:
     githubOwner: bernadin-kabore
 
 catalog:
+  import:
+    entityFilename: catalog-info.yaml
+    pullRequestBranchName: backstage-integration
   rules:
     - allow: [Component, System, API, Group, User, Resource, Location, Template]
   locations:
+    # File locations resolve relative to the backend process, which runs in
+    # packages/backend — hence the two levels up. Getting this wrong fails
+    # quietly: the catalog simply comes up empty.
     - type: file
-      target: ./catalog/org.yaml
+      target: ../../catalog/org.yaml
     - type: file
-      target: ./catalog/platform-system.yaml
+      target: ../../catalog/platform-system.yaml
+    # The scaffolder templates the portal offers. This is a Location entity in
+    # the template repository listing the individual templates, so changing
+    # what the portal offers is a change there and not here.
     - type: url
       target: https://github.com/bernadin-kabore/platform-demo-hello-world-template/blob/main/catalog-info.yaml
       rules:
@@ -111,3 +160,10 @@ techdocs:
     runIn: docker
   publisher:
     type: local
+
+permission:
+  enabled: true
+
+mcpActions:
+  name: 'Platform Engineering Portal'
+  description: 'Tools for exploring the software catalog and creating applications from the golden-path template'
