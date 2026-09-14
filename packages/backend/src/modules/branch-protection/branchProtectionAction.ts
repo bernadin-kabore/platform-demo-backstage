@@ -108,6 +108,11 @@ export const createBranchProtectionAction = (options: { config: Config }) => {
               dismiss_stale_reviews_on_push: true,
               require_last_push_approval: false,
               required_review_thread_resolution: false,
+              // Required by GitHub's schema, and false on purpose: a scaffolded
+              // repository ships no CODEOWNERS file, so demanding code-owner
+              // approval would leave every pull request unmergeable by anyone.
+              // The approving review above is what actually gates a merge.
+              require_code_owner_review: false,
             },
           },
           {
